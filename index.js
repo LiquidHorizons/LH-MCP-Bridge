@@ -7,21 +7,50 @@ const port = process.env.PORT || 10000;
 
 app.use(express.json());
 
-// Updated GET route to speak fluent JSON-RPC to the connector
+// REWORKED: Executes wp_get_site_info automatically for bodyless GET requests
 app.get('/mcp', (req, res) => {
-  console.log("ChatGPT requested metadata/status inspect via GET.");
-  res.json({
+  console.log("Connector environment forced a GET request. Executing internal wp_get_site_info...");
+  
+  const binPath = path.resolve('./node_modules/.bin/wordpress-mcp-server');
+  
+  const mcpProcess = spawn('node', [binPath, '--server-type', 'stdio'], {
+    env: { 
+      ...process.env,
+      WP_URL: process.env.WP_URL || process.env.WORDPRESS_URL 
+    }
+  });
+
+  // Mocking the precise JSON-RPC tool call payload the binary expects
+  const mockToolCall = {
     jsonrpc: "2.0",
-    result: {
-      status: "online",
-      bridge: "LH-MCP-Bridge",
-      target_environment: process.env.WP_URL || process.env.WORDPRESS_URL || "unknown"
+    method: "tools/call",
+    params: {
+      name: "wp_get_site_info",
+      arguments: {}
     },
-    id: null
+    id: 1
+  };
+
+  let responseData = '';
+
+  mcpProcess.stdin.write(JSON.stringify(mockToolCall) + '\n');
+  mcpProcess.stdin.end();
+
+  mcpProcess.stdout.on('data', (data) => {
+    responseData += data.toString();
+  });
+
+  mcpProcess.on('close', () => {
+    try {
+      // Send back the clean, parsed tool output directly
+      res.json(JSON.parse(responseData));
+    } catch (e) {
+      res.status(500).send("Failed to execute internal site info fetch.");
+    }
   });
 });
 
-// The main POST route for executing tools remains secure
+// Main POST route remains intact for full tool execution when supported
 app.post('/mcp', (req, res) => {
   console.log("Forwarding ChatGPT execution command to MCP process...");
   
