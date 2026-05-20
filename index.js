@@ -7,9 +7,8 @@ const port = process.env.PORT || 10000;
 
 app.use(express.json());
 
-// REWORKED: Unpacks the internal JSON-RPC wrapper to return raw result data
 app.get('/mcp', (req, res) => {
-  console.log("Connector environment forced a GET request. Executing internal wp_get_site_info...");
+  console.log("Executing strict, unchunked raw text site-info payload...");
   
   const binPath = path.resolve('./node_modules/.bin/wordpress-mcp-server');
   
@@ -42,51 +41,54 @@ app.get('/mcp', (req, res) => {
   mcpProcess.on('close', () => {
     try {
       const fullResponse = JSON.parse(responseData);
-      
-      // If the binary returned a strict MCP JSON-RPC tool result, extract the raw content
-      if (fullResponse.result && fullResponse.result.content) {
-        console.log("Unpacking nested MCP tool content text block...");
+      let targetPayload = fullResponse;
+
+      // Extract raw inner content if it exists
+      if (fullResponse.result && fullResponse.result.content && fullResponse.result.content[0]) {
         try {
-          // Often the content is returned as an array containing text objects
-          const rawText = fullResponse.result.content[0].text;
-          res.json(JSON.parse(rawText));
-        } catch (innerErr) {
-          res.json(fullResponse.result.content);
+          targetPayload = JSON.parse(fullResponse.result.content[0].text);
+        } catch (e) {
+          targetPayload = fullResponse.result.content[0].text;
         }
       } else if (fullResponse.result) {
-        // Fallback to standard protocol result object
-        res.json(fullResponse.result);
-      } else {
-        res.json(fullResponse);
+        targetPayload = fullResponse.result;
       }
+
+      // Convert payload to a clean, single-line string with a trailing newline
+      const cleanString = JSON.stringify(targetPayload) + '\n';
+      const buffer = Buffer.from(cleanString, 'utf-8');
+
+      // CRITICAL: Explicitly kill chunked transfer encoding and any non-JSON bytes
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': buffer.length,
+        'Connection': 'close',
+        'Transfer-Encoding': 'identity' // Forces compression/chunking off
+      });
+
+      // Blast the raw bytes directly to the socket stream
+      res.write(buffer);
+      res.end();
+      
+      console.log("Raw text payload successfully flushed.");
     } catch (e) {
-      res.status(500).send("Failed to execute internal site info fetch.");
+      res.status(500).send("Failed to process internal tool output.");
     }
   });
 });
 
-// Main POST route remains intact for full tool execution when supported
+// Post handler remains intact
 app.post('/mcp', (req, res) => {
-  console.log("Forwarding ChatGPT execution command to MCP process...");
-  
   const binPath = path.resolve('./node_modules/.bin/wordpress-mcp-server');
-  
   const mcpProcess = spawn('node', [binPath, '--server-type', 'stdio'], {
-    env: { 
-      ...process.env,
-      WP_URL: process.env.WP_URL || process.env.WORDPRESS_URL 
-    }
+    env: { ...process.env, WP_URL: process.env.WP_URL || process.env.WORDPRESS_URL }
   });
 
   let responseData = '';
-
   mcpProcess.stdin.write(JSON.stringify(req.body) + '\n');
   mcpProcess.stdin.end();
 
-  mcpProcess.stdout.on('data', (data) => {
-    responseData += data.toString();
-  });
-
+  mcpProcess.stdout.on('data', (data) => { responseData += data.toString(); });
   mcpProcess.on('close', () => {
     try {
       res.json(JSON.parse(responseData));
