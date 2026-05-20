@@ -7,7 +7,7 @@ const port = process.env.PORT || 10000;
 
 app.use(express.json());
 
-// REWORKED: Executes wp_get_site_info automatically for bodyless GET requests
+// REWORKED: Unpacks the internal JSON-RPC wrapper to return raw result data
 app.get('/mcp', (req, res) => {
   console.log("Connector environment forced a GET request. Executing internal wp_get_site_info...");
   
@@ -20,7 +20,6 @@ app.get('/mcp', (req, res) => {
     }
   });
 
-  // Mocking the precise JSON-RPC tool call payload the binary expects
   const mockToolCall = {
     jsonrpc: "2.0",
     method: "tools/call",
@@ -42,8 +41,24 @@ app.get('/mcp', (req, res) => {
 
   mcpProcess.on('close', () => {
     try {
-      // Send back the clean, parsed tool output directly
-      res.json(JSON.parse(responseData));
+      const fullResponse = JSON.parse(responseData);
+      
+      // If the binary returned a strict MCP JSON-RPC tool result, extract the raw content
+      if (fullResponse.result && fullResponse.result.content) {
+        console.log("Unpacking nested MCP tool content text block...");
+        try {
+          // Often the content is returned as an array containing text objects
+          const rawText = fullResponse.result.content[0].text;
+          res.json(JSON.parse(rawText));
+        } catch (innerErr) {
+          res.json(fullResponse.result.content);
+        }
+      } else if (fullResponse.result) {
+        // Fallback to standard protocol result object
+        res.json(fullResponse.result);
+      } else {
+        res.json(fullResponse);
+      }
     } catch (e) {
       res.status(500).send("Failed to execute internal site info fetch.");
     }
