@@ -7,17 +7,21 @@ const port = process.env.PORT || 10000;
 
 app.use(express.json());
 
-// 1. ADDED: Lightweight GET route for ChatGPT to safely inspect metadata
+// Updated GET route to speak fluent JSON-RPC to the connector
 app.get('/mcp', (req, res) => {
-  console.log("ChatGPT requested safe metadata/status inspect.");
+  console.log("ChatGPT requested metadata/status inspect via GET.");
   res.json({
-    status: "online",
-    bridge: "LH-MCP-Bridge",
-    target_environment: process.env.WP_URL || process.env.WORDPRESS_URL || "unknown"
+    jsonrpc: "2.0",
+    result: {
+      status: "online",
+      bridge: "LH-MCP-Bridge",
+      target_environment: process.env.WP_URL || process.env.WORDPRESS_URL || "unknown"
+    },
+    id: null
   });
 });
 
-// 2. The main POST route for executing tools remains secure
+// The main POST route for executing tools remains secure
 app.post('/mcp', (req, res) => {
   console.log("Forwarding ChatGPT execution command to MCP process...");
   
