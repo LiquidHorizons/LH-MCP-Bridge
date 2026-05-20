@@ -1,8 +1,11 @@
 {
-  "name": "gutenberg-mcp-bridge",
+  "name": "lh-mcp-bridge",
   "version": "1.0.0",
   "type": "module",
+  "dependencies": {
+    "@respira/wordpress-mcp-server": "^6.17.1"
+  },
   "scripts": {
-    "start": "npx -y @respira/wordpress-mcp-server"
+    "start": "node index.js"
   }
 }
