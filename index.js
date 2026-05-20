@@ -4,7 +4,7 @@ import path from 'path';
 console.log("Starting WordPress MCP Server binary link...");
 
 // This executes the hidden binary inside the installed node_modules folder directly
-const binPath = path.resolve('./node_modules/@respira/wordpress-mcp-server/bin/index.js');
+const binPath = path.resolve('./node_modules/.bin/wordpress-mcp-server');
 const port = process.env.PORT || 10000;
 
 const mcpProcess = spawn('node', [binPath, '--port', port], {
