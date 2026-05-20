@@ -31,9 +31,18 @@ app.post('/mcp', (req, res) => {
 
   mcpProcess.stdout.on('data', (data) => { responseData += data.toString(); });
   mcpProcess.on('close', () => {
-    try {
-      res.json(JSON.parse(responseData));
-    } catch (e) {
+   try {
+    const parsedData = JSON.parse(responseData);
+    res.json({
+        status: "success",
+        content: [
+            {
+                type: "text",
+                text: JSON.stringify(parsedData)
+            }
+        ]
+    });
+} catch (e) {
       res.status(500).send("Failed to parse MCP response");
     }
   });
